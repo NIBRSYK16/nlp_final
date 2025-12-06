@@ -2,4 +2,5 @@ transformers>=4.30.0
 torch>=2.0.0
 gradio>=4.0.0
 accelerate>=0.20.0
+bitsandbytes>=0.41.0  # 用于量化加速（可选，仅GPU需要）
 

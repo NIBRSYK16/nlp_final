@@ -1,37 +1,55 @@
-# 使用 Qwen2.5-Coder 模型的 Gradio 界面
+# 使用本地 Qwen2.5-Coder-1.5B 模型的 Gradio 界面
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import gradio as gr
+import os
 
 # 全局变量存储模型和分词器
 model = None
 tokenizer = None
 device = None
 
-def load_model():
+# 设置本地模型路径（请根据你的实际路径修改）
+DEFAULT_MODEL_PATH = "./Qwen2.5-Coder-1.5B"
+
+def load_model(model_path=None):
     """加载模型和分词器"""
     global model, tokenizer, device
     
-    # 加载模型和分词器
-    model_name = "Qwen/Qwen2.5-Coder-0.5B-Instruct"
+    # 使用默认路径或用户提供的路径
+    if model_path is None or model_path.strip() == "":
+        model_path = DEFAULT_MODEL_PATH
     
-    print("正在加载模型和分词器...")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # 检查模型路径是否存在
+    if not os.path.exists(model_path):
+        return f"错误：模型路径不存在: {model_path}\n请检查路径是否正确。"
     
-    # 确定设备
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"使用设备: {device}")
-    
-    # 加载模型
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-        low_cpu_mem_usage=True
-    )
-    model = model.to(device)
-    model.eval()  # 设置为评估模式
-    print("模型加载完成！")
-    return "模型加载完成！"
+    try:
+        print(f"正在从本地路径加载模型: {model_path}")
+        print("正在加载模型和分词器...")
+        
+        # 从本地路径加载分词器
+        tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+        
+        # 确定设备
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"使用设备: {device}")
+        
+        # 从本地路径加载模型
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            local_files_only=True,  # 只使用本地文件，不从网络下载
+            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True
+        )
+        model = model.to(device)
+        model.eval()  # 设置为评估模式
+        print("模型加载完成！")
+        return f"✅ 模型加载完成！\n模型路径: {model_path}\n使用设备: {device}"
+        
+    except Exception as e:
+        return f"❌ 加载模型时出错：{str(e)}"
 
 def generate_code(prompt, system_prompt, max_tokens, temperature, top_p):
     """生成代码的函数"""
@@ -81,16 +99,23 @@ def generate_code(prompt, system_prompt, max_tokens, temperature, top_p):
         return f"生成代码时出错：{str(e)}"
 
 # 创建 Gradio 界面
-with gr.Blocks(title="Qwen2.5-Coder 代码生成器", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("#  Qwen2.5-Coder 代码生成器")
-    gr.Markdown("使用 Qwen2.5-Coder 模型生成代码。请先加载模型，然后输入提示词生成代码。")
+with gr.Blocks(title="Qwen2.5-Coder 本地模型代码生成器", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# 🤖 Qwen2.5-Coder 本地模型代码生成器")
+    gr.Markdown("使用本地下载的 Qwen2.5-Coder-1.5B 模型生成代码。")
     
     with gr.Row():
         with gr.Column():
-            load_btn = gr.Button(" 加载模型", variant="primary", size="lg")
-            load_status = gr.Textbox(label="模型状态", interactive=False)
+            gr.Markdown("### 📁 模型设置")
+            model_path_input = gr.Textbox(
+                label="模型路径",
+                value=DEFAULT_MODEL_PATH,
+                placeholder="输入本地模型路径，例如: ./Qwen2.5-Coder-1.5B",
+                lines=1
+            )
+            load_btn = gr.Button("🔄 加载模型", variant="primary", size="lg")
+            load_status = gr.Textbox(label="模型状态", interactive=False, lines=3)
             
-            with gr.Accordion(" 高级设置", open=False):
+            with gr.Accordion("⚙️ 高级设置", open=False):
                 system_prompt_input = gr.Textbox(
                     label="系统提示词",
                     value="你是一个专业的编程助手，擅长编写和解释代码。",
@@ -120,6 +145,7 @@ with gr.Blocks(title="Qwen2.5-Coder 代码生成器", theme=gr.themes.Soft()) as
                 )
         
         with gr.Column():
+            gr.Markdown("### 💻 代码生成")
             prompt_input = gr.Textbox(
                 label="代码生成提示",
                 placeholder="例如：请用Python编写一个快速排序算法。",
@@ -135,6 +161,7 @@ with gr.Blocks(title="Qwen2.5-Coder 代码生成器", theme=gr.themes.Soft()) as
     # 绑定事件
     load_btn.click(
         fn=load_model,
+        inputs=model_path_input,
         outputs=load_status
     )
     

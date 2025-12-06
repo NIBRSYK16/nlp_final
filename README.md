@@ -1,5 +1,11 @@
 # nlp_final
-use qwen2.5-coder-0.5B
+调用模型：
+
+API:use qwen2.5-coder-0.5B
+
+本地模型：
+
+
 
 run:
 ```python
