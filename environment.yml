@@ -1,0 +1,21 @@
+name: nlp
+channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r
+dependencies:
+  - python=3.9
+  - pytorch>=2.0.0
+  - transformers>=4.30.0
+  - gradio>=4.0.0
+  - accelerate>=0.20.0
+  - pip
+  - pip:
+    # 如果 conda 源中的版本不够新，可以通过 pip 从 PyPI 安装
+    # 通常 pip 会自动使用国内镜像，也可以在 pip install 时指定镜像
+    # - torch>=2.0.0
+    # - transformers>=4.30.0
+    # - gradio>=4.0.0
+    # - accelerate>=0.20.0
