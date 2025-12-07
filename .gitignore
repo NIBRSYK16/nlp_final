@@ -1,0 +1,5 @@
+# vscode配置文件
+.vscode/
+
+# 本地大模型
+models/
