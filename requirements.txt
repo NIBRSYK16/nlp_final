@@ -3,4 +3,5 @@ torch>=2.0.0
 gradio>=4.0.0
 accelerate>=0.20.0
 bitsandbytes>=0.41.0  # 用于量化加速（可选，仅GPU需要）
-
+requests>=2.28.0  # 用于API调用
+datasets>=2.0.0  # 用于模型微调（可选）
