@@ -4,6 +4,40 @@
 
 本项目是一个代码生成推理系统研究项目，聚焦于探索在代码生成领域实现高效推理和持续自我演进的方法论。项目基于AGI（通用人工智能）发展路径中OpenAI提出的“推理者”阶段，旨在构建一个具备自我演进能力的代码生成系统原型。
 
+## 目录结构
+
+      qwen-coder-evolution/
+      │
+      ├── main.py                    # 主程序入口
+      ├── config.py                  # 配置管理
+      │
+      ├── core/                      # 核心功能模块
+      │   ├── __init__.py
+      │   ├── model_manager.py       # 模型管理
+      │   ├── api_client.py          # API调用
+      │   ├── code_processor.py      # 代码处理与验证
+      │   └── evolution_core.py      # 自我演化核心逻辑
+      │
+      ├── data/                      # 数据管理模块
+      │   ├── __init__.py
+      │   ├── training_data.py       # 训练数据处理
+      │   └── file_manager.py        # 文件管理
+      │
+      ├── utils/                     # 工具函数
+      │   ├── __init__.py
+      │   ├── text_utils.py          # 文本处理
+      │   ├── progress_tracker.py    # 进度跟踪
+      │   └── validation_utils.py    # 验证工具
+      │
+      ├── ui/                        # 界面相关
+      │   ├── __init__.py
+      │   ├── gradio_interface.py    # Gradio界面
+      │   └── event_handlers.py      # 事件处理
+      │
+      ├── models/                    # 模型目录（保持不变）
+      ├── evolution_training_data/   # 训练数据目录（保持不变）
+      └── model_checkpoints/         # 模型检查点目录（保持不变）
+
 
 ## 研究背景与目标
 
