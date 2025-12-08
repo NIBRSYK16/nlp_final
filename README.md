@@ -69,7 +69,7 @@
 自我演化是本项目的核心创新功能，实现了模型的自动优化和持续学习：
 
 #### 工作流程
-1. **高质量代码生成**：使用 Qwen2.5-Coder-70B API 生成高质量代码
+1. **高质量代码生成**：使用 qwen2.5-coder-32b-instruct API 生成高质量代码
 2. **语法验证**：自动检查生成代码的语法正确性
 3. **逻辑验证**：使用 Coder-14B API 判断代码是否符合用户需求
 4. **数据收集**：通过验证的 (instruct, code) 二元组自动收集为训练数据
@@ -130,7 +130,7 @@ pip install -r requirements.txt
 
 #### 自我演化模式
 1. 在"自我演化配置"中填写 API 密钥：
-   - Qwen2.5-Coder-70B API Key 和 URL
+   - qwen2.5-coder-32b-instruct API Key 和 URL
    - Coder-14B API Key 和 URL
 2. 在代码生成提示中包含"**自我演化**"关键词
 3. 系统会自动收集高质量训练数据

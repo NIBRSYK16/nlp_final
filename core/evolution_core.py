@@ -40,7 +40,7 @@ def process_single_problem(problem: str, system_prompt: str = None) -> Tuple[boo
     success, code = call_qwen_api(
         API_CONFIG["qwen_70b_api_url"],
         problem,
-        model_name="Qwen2.5-Coder-70B"
+        model_name="qwen2.5-coder-32b-instruct"
     )
     
     if not success:

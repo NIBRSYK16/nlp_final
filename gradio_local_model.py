@@ -115,7 +115,7 @@ def check_code_logic(api_url: str, api_key: str, instruct: str, code: str) -> Tu
             }
         ]
         
-        response_text = call_qwen_api(api_url, api_key, messages, "qwen2.5-coder-14b", max_tokens=200)
+        response_text = call_qwen_api(api_url, api_key, messages, "qwen2.5-coder-14b-instruct", max_tokens=200)
         
         # 判断响应中是否包含"是"或"符合"等肯定词汇
         positive_keywords = ["是", "符合", "正确", "满足", "可以", "能够"]
@@ -131,7 +131,7 @@ def self_evolution_process(instruct: str, qwen_70b_api_key: str, coder_14b_api_k
     global self_evolution_data
     
     try:
-        # 步骤1: 使用Qwen2.5-Coder-70B生成代码
+        # 步骤1: 使用qwen2.5-coder-32b-instruct生成代码
         messages_70b = [
             {
                 "role": "system",
@@ -143,7 +143,7 @@ def self_evolution_process(instruct: str, qwen_70b_api_key: str, coder_14b_api_k
             }
         ]
         
-        generated_code = call_qwen_api(qwen_70b_url, qwen_70b_api_key, messages_70b, "qwen2.5-coder-70b")
+        generated_code = call_qwen_api(qwen_70b_url, qwen_70b_api_key, messages_70b, "qwen2.5-coder-32b-instruct")
         
         # 步骤2: 检查代码语法
         syntax_ok, syntax_msg = check_code_syntax(generated_code)
@@ -658,13 +658,13 @@ with gr.Blocks(title="Qwen2.5-Coder 本地模型代码生成器", theme=gr.theme
             with gr.Accordion("自我演化配置", open=False):
                 gr.Markdown("### API配置（自我演化模式需要）")
                 qwen_70b_api_key = gr.Textbox(
-                    label="Qwen2.5-Coder-70B API Key",
+                    label="qwen2.5-coder-32b-instruct API Key",
                     type="password",
                     placeholder="输入API密钥",
                     info="用于生成高质量代码"
                 )
                 qwen_70b_url = gr.Textbox(
-                    label="Qwen2.5-Coder-70B API URL",
+                    label="qwen2.5-coder-32b-instruct API URL",
                     value=QWEN_70B_API_URL,
                     placeholder="API地址",
                     info="Qwen-70B模型的API地址"

@@ -6,3 +6,7 @@ __pycache__/
 
 # 本地大模型
 models/
+model_checkpoints/
+
+# 打包环境
+output.tar.gz

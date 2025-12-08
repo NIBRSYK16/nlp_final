@@ -14,7 +14,7 @@ CHECKPOINT_DIR = "./model_checkpoints"
 API_CONFIG = {
     "qwen_70b_api_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "qwen_14b_api_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "api_key": "sk-0de8170042f14c87b88adb94a9c3d115",
+    "api_key": "sk-1d1d9ecf1f1b446588871b3e6d5d3a30",
 }
 
 # ====== 自我演化配置 ======

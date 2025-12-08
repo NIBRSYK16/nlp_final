@@ -162,7 +162,7 @@ def update_progress(tracker: Dict, step_name: str, success: bool = True, message
     return report, tracker
 
 # ====== API调用函数 ======
-def call_qwen_api(api_url: str, prompt: str, model_name: str = "Qwen2.5-Coder-70B", 
+def call_qwen_api(api_url: str, prompt: str, model_name: str = "qwen2.5-coder-32b-instruct", 
                   max_tokens: int = 1024, temperature: float = 0.7, 
                   retries: int = 3) -> Tuple[bool, str]:
     """
@@ -237,7 +237,7 @@ def validate_code_with_14b(instruct: str, code: str) -> Tuple[bool, str]:
     success, response = call_qwen_api(
         API_CONFIG["qwen_14b_api_url"], 
         validation_prompt, 
-        model_name="Qwen2.5-Coder-14B",
+        model_name="qwen2.5-coder-14b-instruct",
         max_tokens=256,
         temperature=0.3
     )
@@ -476,7 +476,7 @@ def process_single_problem(problem: str, system_prompt: str = None) -> Tuple[boo
     success, code = call_qwen_api(
         API_CONFIG["qwen_70b_api_url"],
         problem,
-        model_name="Qwen2.5-Coder-70B"
+        model_name="qwen2.5-coder-32b-instruct"
     )
     
     if not success:
