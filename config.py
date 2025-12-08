@@ -12,9 +12,9 @@ CHECKPOINT_DIR = "./model_checkpoints"
 
 # ====== API配置 ======
 API_CONFIG = {
-    "qwen_70b_api_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "qwen_14b_api_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",  # base_url，不包含 /chat/completions
     "api_key": "sk-0de8170042f14c87b88adb94a9c3d115",
+    "region": "beijing",  # 可选 "beijing" 或 "singapore"
 }
 
 # ====== 自我演化配置 ======

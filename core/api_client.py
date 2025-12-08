@@ -2,77 +2,117 @@
 API客户端模块
 """
 import time
-import requests
 import re
-from typing import Tuple
+from typing import Tuple, Optional
+from openai import OpenAI
 from config import API_CONFIG, VALIDATION_CONFIG
+
+# 初始化 OpenAI 客户端（兼容 DashScope）
+_client = None
+
+def get_client() -> OpenAI:
+    """获取或创建 OpenAI 客户端实例"""
+    global _client
+    if _client is None:
+        # 根据 region 设置 base_url
+        region = API_CONFIG.get("region", "beijing")
+        if region == "beijing":
+            base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        elif region == "singapore":
+            base_url = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+        else:
+            base_url = API_CONFIG.get("base_url", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        
+        _client = OpenAI(
+            api_key=API_CONFIG["api_key"],
+            base_url=base_url,
+            timeout=VALIDATION_CONFIG["timeout_seconds"]
+        )
+    return _client
 
 
 def call_qwen_api(
-    api_url: str, 
     prompt: str, 
-    model_name: str = "Qwen2.5-Coder-70B", 
+    model_name: str = "qwen2.5-coder-32b-instruct", 
     max_tokens: int = 1024, 
-    temperature: float = 0.7, 
+    temperature: float = 0.7,
+    system_prompt: Optional[str] = None,
     retries: int = None
 ) -> Tuple[bool, str]:
     """
-    调用Qwen API生成代码
+    调用Qwen API生成代码（使用 OpenAI 兼容接口）
+    
+    Args:
+        prompt: 用户提示
+        model_name: 模型名称
+        max_tokens: 最大token数
+        temperature: 温度参数
+        system_prompt: 系统提示词，如果为None则使用默认
+        retries: 重试次数
+        
+    Returns:
+        (成功标志, 生成的代码或错误信息)
     """
     if retries is None:
         retries = VALIDATION_CONFIG["max_retries"]
     
-    headers = {
-        "Authorization": f"Bearer {API_CONFIG['api_key']}",
-        "Content-Type": "application/json"
-    }
+    # 默认系统提示词
+    if system_prompt is None:
+        system_prompt = "你是一个专业的编程助手，请生成高质量、可运行的Python代码。"
     
     messages = [
-        {"role": "system", "content": "你是一个专业的编程助手，请生成高质量、可运行的Python代码。"},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt}
     ]
     
-    payload = {
-        "model": model_name,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "top_p": 0.9
-    }
+    client = get_client()
     
     for attempt in range(retries):
         try:
-            response = requests.post(
-                api_url, 
-                headers=headers, 
-                json=payload, 
-                timeout=VALIDATION_CONFIG["timeout_seconds"]
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=0.9
             )
-            response.raise_for_status()
-            result = response.json()
-            generated_code = result["choices"][0]["message"]["content"]
             
-            # 提取代码块
-            code_pattern = r"```(?:python)?\n?(.*?)```"
-            matches = re.findall(code_pattern, generated_code, re.DOTALL)
+            # 提取生成的代码
+            raw_content = response.choices[0].message.content
             
-            if matches:
-                generated_code = matches[0].strip()
+            # 清理代码（去除可能的markdown代码块标记）
+            if "```" in raw_content:
+                # 提取代码块中的内容
+                code_pattern = r"```(?:python)?\n?(.*?)```"
+                matches = re.findall(code_pattern, raw_content, re.DOTALL)
+                if matches:
+                    generated_code = matches[0].strip()
+                else:
+                    generated_code = raw_content
+            else:
+                generated_code = raw_content.strip()
             
             return True, generated_code
-        except requests.exceptions.RequestException as e:
+            
+        except Exception as e:
             if attempt == retries - 1:
                 return False, f"API调用失败（尝试{retries}次）: {str(e)}"
             time.sleep(1)
-        except Exception as e:
-            return False, f"API处理失败: {str(e)}"
     
     return False, "未知错误"
 
 
-def validate_code_with_14b(instruct: str, code: str) -> Tuple[bool, str]:
+def validate_code_with_14b(instruct: str, code: str, model_name: str = "qwen2.5-coder-14b-instruct") -> Tuple[bool, str]:
     """
-    使用14B模型验证代码是否符合指令逻辑
+    使用指定模型验证代码是否符合指令逻辑
+    
+    Args:
+        instruct: 用户指令
+        code: 生成的代码
+        model_name: 用于验证的模型名称，默认使用14b模型
+        
+    Returns:
+        (是否通过, 验证响应)
     """
     validation_prompt = f"""
     请分析以下代码是否符合用户指令的逻辑要求：
@@ -94,19 +134,21 @@ def validate_code_with_14b(instruct: str, code: str) -> Tuple[bool, str]:
     [理由]：简要说明理由
     """
     
+    system_prompt = "你是一个代码审查专家，需要判断生成的代码是否符合用户的需求。请仔细分析代码逻辑，判断代码是否正确实现了用户的要求。"
+    
     success, response = call_qwen_api(
-        API_CONFIG["qwen_14b_api_url"], 
-        validation_prompt, 
-        model_name="Qwen2.5-Coder-14B",
+        prompt=validation_prompt,
+        model_name=model_name,
         max_tokens=256,
-        temperature=0.3
+        temperature=0.3,
+        system_prompt=system_prompt
     )
     
     if not success:
         return False, response
     
     # 解析响应
-    if "[是否通过]：是" in response or "通过" in response and "否" not in response:
+    if "[是否通过]：是" in response or ("通过" in response and "否" not in response):
         return True, response
     else:
         return False, response

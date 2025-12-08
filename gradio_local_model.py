@@ -24,8 +24,8 @@ device = None
 
 # 自我演化相关配置
 SELF_EVOLUTION_KEYWORD = "自我演化"
-QWEN_70B_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"  # Qwen API地址
-QWEN_14B_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"  # Coder-14B API地址
+QWEN_70B_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"  # Qwen API地址
+QWEN_14B_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"  # Coder-14B API地址
 self_evolution_data = []  # 存储(instruct, code)二元组
 
 # 设置本地模型路径（请根据你的实际路径修改）

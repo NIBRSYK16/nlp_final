@@ -36,11 +36,13 @@ def process_single_problem(problem: str, system_prompt: str = None) -> Tuple[boo
         "saved_file": ""
     }
     
-    # 步骤1: 使用70B模型生成代码
+    # 步骤1: 使用32B模型生成代码（使用最大的可用模型）
     success, code = call_qwen_api(
-        API_CONFIG["qwen_70b_api_url"],
-        problem,
-        model_name="Qwen2.5-Coder-70B"
+        prompt=problem,
+        model_name="qwen2.5-coder-32b-instruct",
+        max_tokens=2048,
+        temperature=0.7,
+        system_prompt=system_prompt if system_prompt else "你是一个专业的编程助手，请生成高质量、可运行的Python代码。"
     )
     
     if not success:
