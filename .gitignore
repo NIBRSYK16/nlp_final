@@ -1,0 +1,12 @@
+# vscode配置文件
+.vscode/
+
+# Python缓存
+__pycache__/
+
+# 本地大模型
+models/
+
+# 中间文件
+model_checkpoints/
+evolution_training_data/

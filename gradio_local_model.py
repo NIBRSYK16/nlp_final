@@ -24,9 +24,11 @@ device = None
 
 # 自我演化相关配置
 SELF_EVOLUTION_KEYWORD = "自我演化"
-QWEN_70B_API_URL = "https://api.openai.com/v1/chat/completions"  # Qwen API地址
-QWEN_14B_API_URL = "https://api.openai.com/v1/chat/completions"  # Coder-14B API地址
+QWEN_32B_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"  # Qwen API地址
+QWEN_14B_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"  # Coder-14B API地址
 self_evolution_data = []  # 存储(instruct, code)二元组
+qwen_32b_api_key = "sk-1d1d9ecf1f1b446588871b3e6d5d3a30"
+qwen_14b_api_key = "sk-4b834eacde4740479e7c66dbb8ebd46f"
 
 # 设置本地模型路径（请根据你的实际路径修改）
 DEFAULT_MODEL_PATH = "./models/Qwen2.5-Coder-0.5B-instruct"
@@ -115,7 +117,7 @@ def check_code_logic(api_url: str, api_key: str, instruct: str, code: str) -> Tu
             }
         ]
         
-        response_text = call_qwen_api(api_url, api_key, messages, "qwen2.5-coder-14b", max_tokens=200)
+        response_text = call_qwen_api(api_url, api_key, messages, "qwen2.5-coder-14b-instruct", max_tokens=200)
         
         # 判断响应中是否包含"是"或"符合"等肯定词汇
         positive_keywords = ["是", "符合", "正确", "满足", "可以", "能够"]
@@ -125,14 +127,14 @@ def check_code_logic(api_url: str, api_key: str, instruct: str, code: str) -> Tu
     except Exception as e:
         return False, f"逻辑检查失败: {str(e)}"
 
-def self_evolution_process(instruct: str, qwen_70b_api_key: str, coder_14b_api_key: str, 
-                          qwen_70b_url: str, coder_14b_url: str) -> str:
+def self_evolution_process(instruct: str, qwen_32b_api_key: str, coder_14b_api_key: str, 
+                          qwen_32b_url: str, coder_14b_url: str) -> str:
     """自我演化分支：生成代码、验证、收集数据"""
     global self_evolution_data
     
     try:
-        # 步骤1: 使用Qwen2.5-Coder-70B生成代码
-        messages_70b = [
+        # 步骤1: 使用qwen2.5-coder-32b-instruct生成代码
+        messages_32b = [
             {
                 "role": "system",
                 "content": "你是一个专业的编程助手，擅长编写和解释代码。请根据用户需求生成完整、正确、可运行的Python代码。"
@@ -143,7 +145,7 @@ def self_evolution_process(instruct: str, qwen_70b_api_key: str, coder_14b_api_k
             }
         ]
         
-        generated_code = call_qwen_api(qwen_70b_url, qwen_70b_api_key, messages_70b, "qwen2.5-coder-70b")
+        generated_code = call_qwen_api(qwen_32b_url, qwen_32b_api_key, messages_32b, "qwen2.5-coder-32b-instruct")
         
         # 步骤2: 检查代码语法
         syntax_ok, syntax_msg = check_code_syntax(generated_code)
@@ -293,7 +295,7 @@ def fine_tune_model(output_dir: str = "./fine_tuned_model", num_epochs: int = 3)
         return f"微调过程出错：{str(e)}\n\n```\n{traceback.format_exc()}\n```"
 
 def generate_code(prompt, system_prompt, max_tokens, temperature, top_p, 
-                 qwen_70b_api_key, coder_14b_api_key, qwen_70b_url, coder_14b_url):
+                 qwen_32b_api_key, coder_14b_api_key, qwen_32b_url, coder_14b_url):
     """生成代码的函数（支持自我演化分支）"""
     if model is None or tokenizer is None:
         return "错误：模型尚未加载，请先点击'加载模型'按钮。"
@@ -304,14 +306,14 @@ def generate_code(prompt, system_prompt, max_tokens, temperature, top_p,
     # 判断是否进入自我演化分支
     if SELF_EVOLUTION_KEYWORD in prompt:
         # 自我演化分支：只收集数据，不生成代码
-        if not qwen_70b_api_key or not coder_14b_api_key:
-            return "错误：自我演化模式需要配置API密钥。请在设置中填写Qwen-70B和Coder-14B的API密钥。"
+        if not qwen_32b_api_key or not coder_14b_api_key:
+            return "错误：自我演化模式需要配置API密钥。请在设置中填写Qwen-32B和Coder-14B的API密钥。"
         
         return self_evolution_process(
             prompt.replace(SELF_EVOLUTION_KEYWORD, "").strip(),  # 移除关键词
-            qwen_70b_api_key,
+            qwen_32b_api_key,
             coder_14b_api_key,
-            qwen_70b_url if qwen_70b_url else QWEN_70B_API_URL,
+            qwen_32b_url if qwen_32b_url else QWEN_32B_API_URL,
             coder_14b_url if coder_14b_url else QWEN_14B_API_URL
         )
     
@@ -657,34 +659,34 @@ with gr.Blocks(title="Qwen2.5-Coder 本地模型代码生成器", theme=gr.theme
             
             with gr.Accordion("自我演化配置", open=False):
                 gr.Markdown("### API配置（自我演化模式需要）")
-                qwen_70b_api_key = gr.Textbox(
-                    label="Qwen2.5-Coder-70B API Key",
+                qwen_32b_api_key = gr.Textbox(
+                    label="qwen2.5-coder-32b-instruct API Key",
                     type="password",
                     placeholder="输入API密钥",
                     info="用于生成高质量代码"
                 )
-                qwen_70b_url = gr.Textbox(
-                    label="Qwen2.5-Coder-70B API URL",
-                    value=QWEN_70B_API_URL,
+                qwen_32b_url = gr.Textbox(
+                    label="qwen2.5-coder-32b-instruct API URL",
+                    value=QWEN_32B_API_URL,
                     placeholder="API地址",
-                    info="Qwen-70B模型的API地址"
+                    info="Qwen-32B模型的API地址"
                 )
-                coder_14b_api_key = gr.Textbox(
-                    label="Coder-14B API Key",
+                qwen_14b_api_key = gr.Textbox(
+                    label="qwen2.5-coder-14b-instruct API Key",
                     type="password",
                     placeholder="输入API密钥",
                     info="用于验证代码逻辑"
                 )
-                coder_14b_url = gr.Textbox(
-                    label="Coder-14B API URL",
+                qwen_14b_url = gr.Textbox(
+                    label="qwen2.5-coder-14b-instruct API URL",
                     value=QWEN_14B_API_URL,
                     placeholder="API地址",
-                    info="Coder-14B模型的API地址"
+                    info="qwen2.5-coder-14b-instruct模型的API地址"
                 )
                 gr.Markdown("""
                 ### 使用说明
                 - 在代码生成提示中包含"**自我演化**"关键词即可进入自我演化模式
-                - 自我演化模式会使用70B模型生成代码，验证后收集训练数据
+                - 自我演化模式会使用32B模型生成代码，验证后收集训练数据
                 - 收集的数据可用于微调1.5B模型
                 - 自我演化模式**只收集数据，不直接生成代码**
                 """)
@@ -739,10 +741,10 @@ with gr.Blocks(title="Qwen2.5-Coder 本地模型代码生成器", theme=gr.theme
         return f"已收集数据: {len(self_evolution_data)} 条"
     
     def generate_code_with_status_update(prompt, system_prompt, max_tokens, temperature, top_p,
-                                        qwen_70b_key, coder_14b_key, qwen_70b_url_val, coder_14b_url_val):
+                                        qwen_32b_key, coder_14b_key, qwen_32b_url_val, coder_14b_url_val):
         """生成代码并更新数据集状态"""
         result = generate_code(prompt, system_prompt, max_tokens, temperature, top_p,
-                              qwen_70b_key, coder_14b_key, qwen_70b_url_val, coder_14b_url_val)
+                              qwen_32b_key, coder_14b_key, qwen_32b_url_val, coder_14b_url_val)
         status = update_data_status()
         return result, status
     
@@ -754,10 +756,10 @@ with gr.Blocks(title="Qwen2.5-Coder 本地模型代码生成器", theme=gr.theme
             max_tokens_input, 
             temperature_input, 
             top_p_input,
-            qwen_70b_api_key,
-            coder_14b_api_key,
-            qwen_70b_url,
-            coder_14b_url
+            qwen_32b_api_key,
+            qwen_14b_api_key,
+            qwen_32b_url,
+            qwen_14b_url
         ],
         outputs=[output, fine_tune_status]
     )

@@ -4,6 +4,42 @@
 
 本项目是一个代码生成推理系统研究项目，聚焦于探索在代码生成领域实现高效推理和持续自我演进的方法论。项目基于AGI（通用人工智能）发展路径中OpenAI提出的“推理者”阶段，旨在构建一个具备自我演进能力的代码生成系统原型。
 
+## 目录结构
+
+      qwen-coder-evolution/
+      │
+      ├── main.py                    # 主程序入口
+      ├── config.py                  # 配置管理
+      │
+      ├── core/                      # 核心功能模块
+      │   ├── __init__.py
+      │   ├── model_manager.py       # 模型管理
+      │   ├── api_client.py          # API调用
+      │   ├── code_processor.py      # 代码处理与验证
+      │   ├── model_evaluation.py    # 模型评估模块
+      │   ├── fine_tune_manager.py   # 微调管理模块
+      │   └── evolution_core.py      # 自我演化核心逻辑
+      │
+      ├── data/                      # 数据管理模块
+      │   ├── __init__.py
+      │   ├── training_data.py       # 训练数据处理
+      │   └── file_manager.py        # 文件管理
+      │
+      ├── utils/                     # 工具函数
+      │   ├── __init__.py
+      │   ├── text_utils.py          # 文本处理
+      │   ├── progress_tracker.py    # 进度跟踪
+      │   └── validation_utils.py    # 验证工具
+      │
+      ├── ui/                        # 界面相关
+      │   ├── __init__.py
+      │   ├── gradio_interface.py    # Gradio界面
+      │   └── event_handlers.py      # 事件处理
+      │
+      ├── models/                    # 模型目录（保持不变）
+      ├── evolution_training_data/   # 训练数据目录（保持不变）
+      └── model_checkpoints/         # 模型检查点目录（保持不变）
+
 
 ## 研究背景与目标
 
@@ -35,15 +71,15 @@
 自我演化是本项目的核心创新功能，实现了模型的自动优化和持续学习：
 
 #### 工作流程
-1. **高质量代码生成**：使用 Qwen2.5-Coder-70B API 生成高质量代码
+1. **高质量代码生成**：使用 qwen2.5-coder-32b-instruct API 生成高质量代码
 2. **语法验证**：自动检查生成代码的语法正确性
-3. **逻辑验证**：使用 Coder-14B API 判断代码是否符合用户需求
+3. **逻辑验证**：使用 qwen2.5-coder-14b-instruct API 判断代码是否符合用户需求
 4. **数据收集**：通过验证的 (instruct, code) 二元组自动收集为训练数据
 5. **模型微调**：使用收集的高质量数据微调本地 1.5B 模型
 
 #### 特点
 - **自动化数据收集**：无需人工标注，自动筛选高质量代码样本
-- **多模型协作**：70B 生成 + 14B 验证 + 1.5B 部署的混合架构
+- **多模型协作**：32B 生成 + 14B 验证 + 1.5B 部署的混合架构
 - **持续优化**：通过微调实现模型的持续改进
 - **智能分支**：通过关键词"自我演化"自动切换工作模式
 
@@ -96,8 +132,8 @@ pip install -r requirements.txt
 
 #### 自我演化模式
 1. 在"自我演化配置"中填写 API 密钥：
-   - Qwen2.5-Coder-70B API Key 和 URL
-   - Coder-14B API Key 和 URL
+   - qwen2.5-coder-32b-instruct API Key 和 URL
+   - qwen2.5-coder-14b-instruct API Key 和 URL
 2. 在代码生成提示中包含"**自我演化**"关键词
 3. 系统会自动收集高质量训练数据
 4. 在"模型微调"区域使用收集的数据进行微调
@@ -110,7 +146,7 @@ pip install -r requirements.txt
 
 ### 1. 自我演化机制
 - **首创性**：实现了代码生成模型的自动数据收集和持续优化
-- **多模型协作**：利用不同规模模型的优势（70B生成、14B验证、1.5B部署）
+- **多模型协作**：利用不同规模模型的优势（32B生成、14B验证、1.5B部署）
 - **自动化流程**：从代码生成到验证到微调的完整自动化
 
 ### 2. 智能分支判断
