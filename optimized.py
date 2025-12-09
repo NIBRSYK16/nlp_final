@@ -1049,7 +1049,7 @@ with gr.Blocks(title="Qwen2.5-Coder 批量自我演化系统", theme=gr.themes.S
             eval_output = gr.Markdown(label="评估结果")
             
             # 添加评估说明
-            with gr.Accordion("📖 评估说明", open=False):
+            with gr.Accordion(" 评估说明", open=False):
                 gr.Markdown("""
                 ### 评估结果说明
                 
