@@ -1,4 +1,4 @@
-# 使用本地 Qwen2.5-Coder-1.5B 模型的 Gradio 界面，带批量自我演化功能
+# 使用本地 Qwen2.5-Coder-0.5B 模型的 Gradio 界面，带批量自我演化功能
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import gradio as gr
@@ -1016,7 +1016,7 @@ with gr.Blocks(title="Qwen2.5-Coder 批量自我演化系统", theme=gr.themes.S
     gr.Markdown("#  Qwen2.5-Coder 批量自我演化系统")
     gr.Markdown("""
     ##  功能特性：
-    1. **普通代码生成**：使用本地1.5B模型生成代码
+    1. **普通代码生成**：使用本地0.5B模型生成代码
     2. **批量自我演化**：输入包含多个引号内的问题，系统自动提取并批量训练
     3. **智能问题提取**：自动从文本中提取引号内的编程问题
     """)
@@ -1322,7 +1322,7 @@ with gr.Blocks(title="Qwen2.5-Coder 批量自我演化系统", theme=gr.themes.S
     #    - 14B模型验证代码逻辑
     #    - 语法检查
     #    - 保存训练数据
-    # 4. 用所有成功的问题微调本地1.5B模型
+    # 4. 用所有成功的问题微调本地0.5B模型
     # 5. 返回处理报告
     
     # ### 5. 注意事项：

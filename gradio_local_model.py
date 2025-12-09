@@ -1,4 +1,4 @@
-# 使用本地 Qwen2.5-Coder-1.5B 模型的 Gradio 界面
+# 使用本地 Qwen2.5-Coder-0.5B 模型的 Gradio 界面
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer
 from transformers import DataCollatorForLanguageModeling
 import torch
@@ -184,7 +184,7 @@ def self_evolution_process(instruct: str, qwen_32b_api_key: str, coder_14b_api_k
         return f"自我演化过程出错：{str(e)}\n{traceback.format_exc()}"
 
 def fine_tune_model(output_dir: str = "./fine_tuned_model", num_epochs: int = 3):
-    """使用收集的数据微调1.5B模型"""
+    """使用收集的数据微调0.5B模型"""
     global model, tokenizer, self_evolution_data
     
     if model is None or tokenizer is None:
@@ -562,7 +562,7 @@ def evaluate_model(max_tasks: int = None, max_tokens: int = 512, temperature: fl
 # 创建 Gradio 界面
 with gr.Blocks(title="Qwen2.5-Coder 本地模型代码生成器", theme=gr.themes.Soft()) as demo:
     gr.Markdown("# Qwen2.5-Coder 本地模型代码生成器")
-    gr.Markdown("使用本地下载的 Qwen2.5-Coder-1.5B 模型生成代码。")
+    gr.Markdown("使用本地下载的 Qwen2.5-Coder-0.5B-Instruct 模型生成代码。")
     
     with gr.Row():
         with gr.Column():
@@ -570,7 +570,7 @@ with gr.Blocks(title="Qwen2.5-Coder 本地模型代码生成器", theme=gr.theme
             model_path_input = gr.Textbox(
                 label="模型路径",
                 value=DEFAULT_MODEL_PATH,
-                placeholder="输入本地模型路径，例如: ./Qwen2.5-Coder-1.5B",
+                placeholder="输入本地模型路径，例如: ./Qwen2.5-Coder-0.5B-Instruct",
                 lines=1
             )
             load_btn = gr.Button("加载模型", variant="primary", size="lg")
@@ -687,7 +687,7 @@ with gr.Blocks(title="Qwen2.5-Coder 本地模型代码生成器", theme=gr.theme
                 ### 使用说明
                 - 在代码生成提示中包含"**自我演化**"关键词即可进入自我演化模式
                 - 自我演化模式会使用32B模型生成代码，验证后收集训练数据
-                - 收集的数据可用于微调1.5B模型
+                - 收集的数据可用于微调0.5B模型
                 - 自我演化模式**只收集数据，不直接生成代码**
                 """)
             
