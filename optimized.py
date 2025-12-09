@@ -839,6 +839,9 @@ def evaluate_model(max_tasks: int = None, max_tokens: int = 512, temperature: fl
         return
     
     try:
+        # 确保模型在 eval 模式
+        model.eval()
+        
         # 读取数据集
         tasks = []
         with open(dataset_path, 'r', encoding='utf-8') as f:
@@ -878,67 +881,82 @@ def evaluate_model(max_tasks: int = None, max_tokens: int = 512, temperature: fl
             
             model_inputs = tokenizer([text], return_tensors="pt").to(device)
             
-            with torch.no_grad():
-                generated_ids = model.generate(
-                    **model_inputs,
-                    max_new_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    do_sample=True
-                )
-            
-            generated_ids = [
-                output_ids[len(input_ids):] 
-                for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-            ]
-            
-            generated_code = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-            
-            # 提取函数代码
-            function_code = extract_function_code(generated_code, entry_point)
-            
-            # 构建完整代码用于测试
-            full_code = prompt + function_code + "\n" + test_code
-            
-            # 执行测试
             try:
-                # 创建安全的执行环境
-                namespace = {}
-                exec(full_code, namespace)
+                with torch.no_grad():
+                    # 使用 pad_token_id 以避免 CUDA 错误
+                    generated_ids = model.generate(
+                        **model_inputs,
+                        max_new_tokens=int(max_tokens),
+                        temperature=float(temperature),
+                        top_p=float(top_p),
+                        do_sample=True,
+                        pad_token_id=tokenizer.eos_token_id,
+                        eos_token_id=tokenizer.eos_token_id,
+                        num_beams=1
+                    )
                 
-                # 运行测试
-                check_func = namespace.get('check')
-                candidate_func = namespace.get(entry_point)
+                # 提取生成的 token，去掉输入部分
+                generated_ids = [
+                    output_ids[len(input_ids):] 
+                    for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+                ]
                 
-                if check_func and candidate_func:
-                    check_func(candidate_func)
-                    passed_tasks += 1
-                    results.append(f" {task_id}: 通过")
-                else:
-                    failed_tasks.append(task_id)
-                    results.append(f" {task_id}: 函数未找到（生成的代码中可能没有正确的函数定义）")
+                generated_code = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+                
+                # 清理 GPU 缓存
+                del model_inputs
+                torch.cuda.empty_cache()
+                
+                # 提取函数代码
+                function_code = extract_function_code(generated_code, entry_point)
+                
+                # 构建完整代码用于测试
+                full_code = prompt + function_code + "\n" + test_code
+                
+                # 执行测试
+                try:
+                    # 创建安全的执行环境
+                    namespace = {}
+                    exec(full_code, namespace)
                     
-            except AssertionError as e:
-                # 测试失败：生成的函数没有通过测试用例
+                    # 运行测试
+                    check_func = namespace.get('check')
+                    candidate_func = namespace.get(entry_point)
+                    
+                    if check_func and candidate_func:
+                        check_func(candidate_func)
+                        passed_tasks += 1
+                        results.append(f" {task_id}: 通过")
+                    else:
+                        failed_tasks.append(task_id)
+                        results.append(f" {task_id}: 函数未找到（生成的代码中可能没有正确的函数定义）")
+                        
+                except AssertionError as e:
+                    # 测试失败：生成的函数没有通过测试用例
+                    failed_tasks.append(task_id)
+                    results.append(f" {task_id}: 测试失败（函数输出不符合预期）")
+                except SyntaxError as e:
+                    # 语法错误：生成的代码有语法问题
+                    failed_tasks.append(task_id)
+                    error_msg = str(e)[:150]
+                    results.append(f" {task_id}: 语法错误 - {error_msg}")
+                except NameError as e:
+                    # 名称错误：可能缺少导入或函数名错误
+                    failed_tasks.append(task_id)
+                    error_msg = str(e)[:150]
+                    results.append(f" {task_id}: 名称错误 - {error_msg}")
+                except Exception as e:
+                    # 其他执行错误：运行时错误
+                    failed_tasks.append(task_id)
+                    error_type = type(e).__name__
+                    error_msg = str(e)[:150]  # 截断错误信息
+                    results.append(f" {task_id}: {error_type} - {error_msg}")
+                    
+            except RuntimeError as e:
+                # 捕获 CUDA 错误和其他运行时错误
                 failed_tasks.append(task_id)
-                error_msg = str(e)[:150] if str(e) else "断言失败"
-                results.append(f" {task_id}: 测试失败（函数输出不符合预期）")
-            except SyntaxError as e:
-                # 语法错误：生成的代码有语法问题
-                failed_tasks.append(task_id)
-                error_msg = str(e)[:150]
-                results.append(f" {task_id}: 语法错误 - {error_msg}")
-            except NameError as e:
-                # 名称错误：可能缺少导入或函数名错误
-                failed_tasks.append(task_id)
-                error_msg = str(e)[:150]
-                results.append(f" {task_id}: 名称错误 - {error_msg}")
-            except Exception as e:
-                # 其他执行错误：运行时错误
-                failed_tasks.append(task_id)
-                error_type = type(e).__name__
-                error_msg = str(e)[:150]  # 截断错误信息
-                results.append(f" {task_id}: {error_type} - {error_msg}")
+                error_msg = str(e)[:100]
+                results.append(f" {task_id}: CUDA/运行时错误 - 跳过此任务")
             
             # 实时更新进度
             current_rate = (passed_tasks / (idx + 1) * 100) if (idx + 1) > 0 else 0
