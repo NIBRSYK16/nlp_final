@@ -773,6 +773,211 @@ def generate_code(prompt, system_prompt, max_tokens, temperature, top_p, enable_
         except Exception as e:
             return f"生成代码时出错：{str(e)}", ""
 
+# ====== 模型评估函数 ======
+def extract_function_code(generated_text: str, entry_point: str) -> str:
+    """从生成的文本中提取函数代码"""
+    # 清理生成的文本
+    text = generated_text.strip()
+    
+    # 方式1: 查找完整的函数定义（包括函数签名）
+    pattern = rf'def\s+{re.escape(entry_point)}\s*\([^)]*\)\s*:.*?(?=\n\ndef\s+|\nclass\s+|$)'
+    match = re.search(pattern, text, re.DOTALL)
+    if match:
+        return match.group(0).strip()
+    
+    # 方式2: 如果包含函数定义，提取函数体（基于缩进）
+    if f"def {entry_point}" in text:
+        lines = text.split('\n')
+        start_idx = -1
+        for i, line in enumerate(lines):
+            if f"def {entry_point}" in line:
+                start_idx = i
+                break
+        
+        if start_idx >= 0:
+            result = [lines[start_idx]]  # 包含函数签名
+            # 获取函数签名的缩进级别
+            base_indent = len(lines[start_idx]) - len(lines[start_idx].lstrip())
+            
+            # 提取函数体
+            for i in range(start_idx + 1, len(lines)):
+                line = lines[i]
+                if not line.strip():  # 空行
+                    result.append(line)
+                    continue
+                
+                current_indent = len(line) - len(line.lstrip())
+                # 如果缩进小于等于基础缩进，说明函数结束了
+                if current_indent <= base_indent:
+                    break
+                result.append(line)
+            
+            return '\n'.join(result)
+    
+    # 方式3: 尝试查找函数体（可能没有函数签名）
+    # 查找以4个空格或tab开头的代码块
+    lines = text.split('\n')
+    if lines and (lines[0].startswith('    ') or lines[0].startswith('\t')):
+        # 可能是函数体，需要添加函数签名
+        # 但这里我们不知道函数签名，所以直接返回
+        return '\n'.join(lines)
+    
+    # 方式4: 如果都没有找到，返回原始文本（可能是完整的函数体）
+    return text
+
+def evaluate_model(max_tasks: int = None, max_tokens: int = 512, temperature: float = 0.7, top_p: float = 0.9):
+    """评估模型在 HumanEval 数据集上的表现（生成器函数，支持流式输出）"""
+    global model, tokenizer, device
+    
+    if model is None or tokenizer is None:
+        yield "错误：模型尚未加载，请先点击'加载模型'按钮。"
+        return
+    
+    dataset_path = "./datasets/human-eval-v2-20210705.jsonl"
+    if not os.path.exists(dataset_path):
+        yield f"错误：数据集文件不存在: {dataset_path}"
+        return
+    
+    try:
+        # 读取数据集
+        tasks = []
+        with open(dataset_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip():
+                    tasks.append(json.loads(line))
+        
+        if max_tasks:
+            tasks = tasks[:max_tasks]
+        
+        total_tasks = len(tasks)
+        passed_tasks = 0
+        failed_tasks = []
+        results = []
+        
+        system_prompt = "你是一个专业的编程助手，擅长编写和解释代码。请根据给定的函数签名和文档字符串，实现该函数。"
+        
+        yield f"开始评估 {total_tasks} 个任务...\n\n"
+        
+        for idx, task in enumerate(tasks):
+            task_id = task['task_id']
+            prompt = task['prompt']
+            entry_point = task['entry_point']
+            test_code = task['test']
+            
+            # 生成代码
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+            
+            text = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+            
+            model_inputs = tokenizer([text], return_tensors="pt").to(device)
+            
+            with torch.no_grad():
+                generated_ids = model.generate(
+                    **model_inputs,
+                    max_new_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    do_sample=True
+                )
+            
+            generated_ids = [
+                output_ids[len(input_ids):] 
+                for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+            ]
+            
+            generated_code = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+            
+            # 提取函数代码
+            function_code = extract_function_code(generated_code, entry_point)
+            
+            # 构建完整代码用于测试
+            full_code = prompt + function_code + "\n" + test_code
+            
+            # 执行测试
+            try:
+                # 创建安全的执行环境
+                namespace = {}
+                exec(full_code, namespace)
+                
+                # 运行测试
+                check_func = namespace.get('check')
+                candidate_func = namespace.get(entry_point)
+                
+                if check_func and candidate_func:
+                    check_func(candidate_func)
+                    passed_tasks += 1
+                    results.append(f" {task_id}: 通过")
+                else:
+                    failed_tasks.append(task_id)
+                    results.append(f" {task_id}: 函数未找到（生成的代码中可能没有正确的函数定义）")
+                    
+            except AssertionError as e:
+                # 测试失败：生成的函数没有通过测试用例
+                failed_tasks.append(task_id)
+                error_msg = str(e)[:150] if str(e) else "断言失败"
+                results.append(f" {task_id}: 测试失败（函数输出不符合预期）")
+            except SyntaxError as e:
+                # 语法错误：生成的代码有语法问题
+                failed_tasks.append(task_id)
+                error_msg = str(e)[:150]
+                results.append(f" {task_id}: 语法错误 - {error_msg}")
+            except NameError as e:
+                # 名称错误：可能缺少导入或函数名错误
+                failed_tasks.append(task_id)
+                error_msg = str(e)[:150]
+                results.append(f" {task_id}: 名称错误 - {error_msg}")
+            except Exception as e:
+                # 其他执行错误：运行时错误
+                failed_tasks.append(task_id)
+                error_type = type(e).__name__
+                error_msg = str(e)[:150]  # 截断错误信息
+                results.append(f" {task_id}: {error_type} - {error_msg}")
+            
+            # 实时更新进度
+            current_rate = (passed_tasks / (idx + 1) * 100) if (idx + 1) > 0 else 0
+            progress_report = f"#  模型评估进度\n\n"
+            progress_report += f"**进度**: {idx + 1}/{total_tasks} ({((idx + 1)/total_tasks*100):.1f}%)\n\n"
+            progress_report += f"**当前通过率**: {current_rate:.2f}% ({passed_tasks}/{idx + 1})\n\n"
+            progress_report += f"## 详细结果\n\n"
+            progress_report += "\n".join(results[-20:])  # 显示最近20个结果
+            
+            yield progress_report
+        
+        # 计算最终通过率
+        pass_rate = (passed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+        
+        # 生成最终报告
+        final_report = f"""#  模型评估最终报告
+
+## 总体结果
+- **总任务数**: {total_tasks}
+- **通过任务数**: {passed_tasks}
+- **失败任务数**: {len(failed_tasks)}
+- **通过率**: {pass_rate:.2f}%
+
+## 详细结果
+"""
+        final_report += "\n".join(results)
+        
+        if failed_tasks:
+            final_report += f"\n\n## 失败的任务ID\n"
+            final_report += ", ".join(failed_tasks[:20])  # 只显示前20个
+            if len(failed_tasks) > 20:
+                final_report += f" ... (还有 {len(failed_tasks) - 20} 个)"
+        
+        yield final_report
+        
+    except Exception as e:
+        import traceback
+        yield f"评估过程中出错：{str(e)}\n\n```\n{traceback.format_exc()}\n```"
+
 # ====== 查看训练数据 ======
 def list_training_data(limit: int = 20):
     """列出训练数据"""
@@ -824,6 +1029,58 @@ with gr.Blocks(title="Qwen2.5-Coder 批量自我演化系统", theme=gr.themes.S
             )
             load_btn = gr.Button(" 加载模型", variant="primary", size="lg")
             load_status = gr.Textbox(label="模型状态", interactive=False, lines=3)
+            
+            gr.Markdown("### 📊 模型评估")
+            with gr.Row():
+                eval_max_tasks = gr.Number(
+                    label="评估任务数量",
+                    value=10,
+                    minimum=1,
+                    maximum=164,
+                    step=1,
+                    info="输入要评估的任务数量（1-164），建议先用少量任务测试。留空或0表示评估全部任务。"
+                )
+                eval_all_check = gr.Checkbox(
+                    label="评估全部任务（164个）",
+                    value=False,
+                    info="勾选此项将评估所有164个任务"
+                )
+            eval_btn = gr.Button(" 开始评估", variant="secondary", size="lg")
+            eval_output = gr.Markdown(label="评估结果")
+            
+            # 添加评估说明
+            with gr.Accordion("📖 评估说明", open=False):
+                gr.Markdown("""
+                ### 评估结果说明
+                
+                ** 通过**: 生成的函数通过了所有测试用例
+                
+                ** 测试失败**: 
+                - 函数能够正常执行，但输出结果不符合预期
+                - 说明生成的代码逻辑有误
+                - 例如：返回值错误、边界条件处理不当等
+                
+                ** 语法错误**: 
+                - 生成的代码存在Python语法问题
+                - 例如：缺少冒号、括号不匹配、缩进错误等
+                
+                ** 名称错误**: 
+                - 代码中使用了未定义的变量或函数
+                - 可能缺少必要的导入语句
+                
+                ** 函数未找到**: 
+                - 生成的代码中没有找到目标函数
+                - 可能是函数名不匹配或代码格式问题
+                
+                ** 其他执行错误**: 
+                - 运行时出现的其他错误
+                - 例如：类型错误、索引越界等
+                
+                ### HumanEval数据集
+                - 包含164个Python编程任务
+                - 每个任务都有多个测试用例
+                - 只有通过所有测试用例才算通过
+                """)
             
             with gr.Accordion(" API设置", open=False):
                 api_key_input = gr.Textbox(
@@ -895,9 +1152,7 @@ with gr.Blocks(title="Qwen2.5-Coder 批量自我演化系统", theme=gr.themes.S
                 value=example_input
             )
             
-            with gr.Row():
-                generate_btn = gr.Button(" 生成代码", variant="primary", size="lg")
-                evolve_btn = gr.Button(" 执行自我演化", variant="stop", size="lg")
+            generate_btn = gr.Button(" 生成代码", variant="primary", size="lg")
             
             status_output = gr.Textbox(
                 label="执行状态", interactive=False, lines=12
@@ -953,7 +1208,7 @@ with gr.Blocks(title="Qwen2.5-Coder 批量自我演化系统", theme=gr.themes.S
         for i, problem in enumerate(problems, 1):
             result += f"{i}. {problem}\n"
         
-        result += f"\n提示：点击'执行自我演化'按钮开始批量训练。"
+        result += f"\n提示：点击'生成代码'按钮开始批量训练（输入中包含'自我演化'关键词即可）。"
         return result
     
     # 绑定事件
@@ -964,19 +1219,6 @@ with gr.Blocks(title="Qwen2.5-Coder 批量自我演化系统", theme=gr.themes.S
     )
     
     generate_btn.click(
-        fn=generate_code,
-        inputs=[
-            prompt_input, system_prompt_input, max_tokens_input, 
-            temperature_input, top_p_input, enable_evolution
-        ],
-        outputs=[status_output, code_output]
-    ).then(
-        fn=detect_mode,
-        inputs=prompt_input,
-        outputs=mode_indicator
-    )
-    
-    evolve_btn.click(
         fn=generate_code,
         inputs=[
             prompt_input, system_prompt_input, max_tokens_input, 
@@ -1023,6 +1265,22 @@ with gr.Blocks(title="Qwen2.5-Coder 批量自我演化系统", theme=gr.themes.S
         outputs=mode_indicator
     )
     
+    # 模型评估事件
+    def evaluate_wrapper(max_tasks, eval_all, max_tokens, temperature, top_p):
+        """评估函数的包装器，支持流式输出"""
+        if eval_all:
+            max_tasks_val = None  # 评估全部任务
+        else:
+            max_tasks_val = int(max_tasks) if max_tasks and max_tasks > 0 else None
+        for result in evaluate_model(max_tasks_val, max_tokens, temperature, top_p):
+            yield result
+    
+    eval_btn.click(
+        fn=evaluate_wrapper,
+        inputs=[eval_max_tasks, eval_all_check, max_tokens_input, temperature_input, top_p_input],
+        outputs=eval_output
+    )
+    
     # 示例提示词
     gr.Examples(
         examples=[
@@ -1036,7 +1294,7 @@ with gr.Blocks(title="Qwen2.5-Coder 批量自我演化系统", theme=gr.themes.S
     
     # 使用说明
     # gr.Markdown("""
-    # ## 📖 使用说明：
+    # ##  使用说明：
     
     # ### 1. 普通代码生成：
     # - 输入普通的代码生成提示
@@ -1046,7 +1304,7 @@ with gr.Blocks(title="Qwen2.5-Coder 批量自我演化系统", theme=gr.themes.S
     # - 在输入中包含"自我演化"关键词
     # - 用**双引号**括起每个编程问题
     # - 每个问题占一行或使用分隔符
-    # - 点击"执行自我演化"按钮
+    # - 点击"生成代码"按钮（输入中包含"自我演化"关键词即可）
     
     # ### 3. 输入格式示例：
     # ```
