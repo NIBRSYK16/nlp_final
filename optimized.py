@@ -13,6 +13,16 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import os
+# 强制使用CPU
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+# 禁用PyTorch的CUDA
+os.environ["NO_CUDA"] = "1"
+os.environ["USE_CPU"] = "1"
+
+# 在导入torch前设置
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+
 # ====== 全局变量 ======
 model = None
 tokenizer = None
@@ -666,26 +676,32 @@ def load_model(model_path=None):
         # 加载分词器
         tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         
-        # 确定设备
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"使用设备: {device}")
+        # 强制使用CPU并禁用GPU相关功能
+        device = torch.device("cpu")
+        print(f"强制使用设备: CPU")
         
-        # 加载模型
+        # 修改模型加载配置，确保完全使用CPU
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
             local_files_only=True,
-            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            torch_dtype=torch.float32,  # 强制使用float32
             low_cpu_mem_usage=True,
-            trust_remote_code=True
+            trust_remote_code=True,
+            device_map="cpu"  # 明确指定使用CPU
         )
+        
+        # 确保模型在CPU上
         model = model.to(device)
         model.eval()
         
-        return f" 模型加载完成！\n模型路径: {model_path}\n使用设备: {device}"
+        # 禁用所有可能使用GPU的功能
+        torch.cuda.is_available = lambda: False  # 伪装没有CUDA
+        
+        return f" 模型加载完成！\n模型路径: {model_path}\n使用设备: CPU"
         
     except Exception as e:
         return f" 加载模型时出错：{str(e)}"
-
+    
 # ====== 主生成函数 ======
 def generate_code(prompt, system_prompt, max_tokens, temperature, top_p, enable_evolution=True):
     """生成代码的主函数"""
@@ -839,7 +855,7 @@ def evaluate_model(max_tasks: int = None, max_tokens: int = 512, temperature: fl
         return
     
     try:
-        # 确保模型在 eval 模式
+        # 确保模型在 eval 模式且禁用梯度计算
         model.eval()
         
         # 读取数据集
@@ -883,7 +899,7 @@ def evaluate_model(max_tasks: int = None, max_tokens: int = 512, temperature: fl
             
             try:
                 with torch.no_grad():
-                    # 使用 pad_token_id 以避免 CUDA 错误
+                    # 使用CPU优化的生成参数
                     generated_ids = model.generate(
                         **model_inputs,
                         max_new_tokens=int(max_tokens),
@@ -892,10 +908,13 @@ def evaluate_model(max_tasks: int = None, max_tokens: int = 512, temperature: fl
                         do_sample=True,
                         pad_token_id=tokenizer.eos_token_id,
                         eos_token_id=tokenizer.eos_token_id,
-                        num_beams=1
+                        num_beams=1,
+                        no_repeat_ngram_size=3,
+                        repetition_penalty=1.2,
+                        max_length=int(max_tokens) + len(model_inputs['input_ids'][0])
                     )
                 
-                # 提取生成的 token，去掉输入部分
+                # 提取生成的token
                 generated_ids = [
                     output_ids[len(input_ids):] 
                     for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
@@ -903,9 +922,10 @@ def evaluate_model(max_tasks: int = None, max_tokens: int = 512, temperature: fl
                 
                 generated_code = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
                 
-                # 清理 GPU 缓存
+                # 清理内存
                 del model_inputs
-                torch.cuda.empty_cache()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 
                 # 提取函数代码
                 function_code = extract_function_code(generated_code, entry_point)
@@ -949,14 +969,29 @@ def evaluate_model(max_tasks: int = None, max_tokens: int = 512, temperature: fl
                     # 其他执行错误：运行时错误
                     failed_tasks.append(task_id)
                     error_type = type(e).__name__
-                    error_msg = str(e)[:150]  # 截断错误信息
+                    error_msg = str(e)[:150]
                     results.append(f" {task_id}: {error_type} - {error_msg}")
                     
             except RuntimeError as e:
-                # 捕获 CUDA 错误和其他运行时错误
+                # 捕获CUDA错误和其他运行时错误
                 failed_tasks.append(task_id)
                 error_msg = str(e)[:100]
-                results.append(f" {task_id}: CUDA/运行时错误 - 跳过此任务")
+                # 添加更详细的错误信息
+                import traceback
+                debug_info = traceback.format_exc()
+                if "CUDA" in str(e):
+                    results.append(f" {task_id}: CUDA错误（可能配置问题）- {error_msg}")
+                    print(f"CUDA错误详情: {debug_info}")
+                else:
+                    results.append(f" {task_id}: 运行时错误 - {error_msg}")
+                    print(f"运行时错误详情: {debug_info}")
+            except Exception as e:
+                # 捕获其他异常
+                failed_tasks.append(task_id)
+                error_msg = str(e)[:100]
+                results.append(f" {task_id}: 未知错误 - {error_msg}")
+                import traceback
+                print(f"未知错误详情: {traceback.format_exc()}")
             
             # 实时更新进度
             current_rate = (passed_tasks / (idx + 1) * 100) if (idx + 1) > 0 else 0
