@@ -88,6 +88,8 @@
 - 支持自定义训练轮数和保存路径
 - 实时显示训练进度和数据集状态
 
+自演进、复杂推理和模型微调效果已经得到验证，在我们的[finetune_test](https://github.com/NIBRSYK16/finetune_test)仓库中。
+
 ### 6. **高质量指令生成模块（simplified_toe_qwen）**  
 基于 Tree-of-Evolution 方法的简化版指令生成系统，用于自动生成高质量的编程问题指令：
 
